@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.phoneagent.app"
-    android:versionCode="173"
-    android:versionName="3.61">
+    package="com.gsic.app"
+    android:versionCode="178"
+    android:versionName="3.66">
 
     <!-- INTERNET 仅用于首次下载官方 Termux 环境（约 30MB，一次性）；日常使用仍本地执行 -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -53,12 +53,12 @@
         </activity>
         <provider
             android:name=".CaptureProvider"
-            android:authorities="com.phoneagent.app.captureprovider"
+            android:authorities="com.gsic.app.captureprovider"
             android:exported="false"
             android:grantUriPermissions="true" />
         <provider
             android:name=".UpdateProvider"
-            android:authorities="com.phoneagent.app.updateprovider"
+            android:authorities="com.gsic.app.updateprovider"
             android:exported="false"
             android:grantUriPermissions="true" />
         <service android:name=".AgentAccessibilityService"
@@ -80,7 +80,7 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="com.phoneagent.app.WATCHDOG" />
+                <action android:name="com.gsic.app.WATCHDOG" />
             </intent-filter>
         </receiver>
     </application>

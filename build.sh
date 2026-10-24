@@ -76,7 +76,7 @@ if [ ! -f debug.keystore ]; then
 fi
 $BT/zipalign -f 4 $OUT/app.apk $OUT/app-aligned.apk
 VN=$(grep -o 'versionName="[0-9.]*"' AndroidManifest.xml | grep -o '[0-9.]*')
-APK=../phone-agent-$VN.apk
+APK=../gsic-$VN.apk
 $BT/apksigner sign --ks debug.keystore --ks-pass pass:android --key-pass pass:android \
   --out $APK $OUT/app-aligned.apk
 
@@ -91,7 +91,7 @@ m = open('AndroidManifest.xml').read()
 vc = re.search(r'versionCode=\"(\d+)\"', m).group(1)
 vn = re.search(r'versionName=\"([\d.]+)\"', m).group(1)
 apk_url = ('https://github.com/Jinzhiying2004/phone-agent-gsic'
-           '/releases/download/v%s/phone-agent-%s.apk' % (vn, vn))
+           '/releases/download/v%s/gsic-%s.apk' % (vn, vn))
 json.dump({'version': vn, 'versionCode': int(vc), 'apkUrl': apk_url,
            'notes': ''}, open('../version.json', 'w'), ensure_ascii=False, indent=2)
 print(open('../version.json').read())

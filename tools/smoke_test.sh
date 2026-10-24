@@ -3,8 +3,8 @@
 # 用法：./tools/smoke_test.sh [apk路径]
 # 在已 root 且装好 App 的测试机上跑（需 adb 连接）
 set -e
-APK="${1:-phone-agent-*.apk}"
-PKG="com.phoneagent.app"
+APK="${1:-gsic-*.apk}"
+PKG="com.gsic.app"
 
 echo "== 1. 安装 APK =="
 adb install -r $APK
@@ -20,11 +20,11 @@ adb shell "su -c 'netstat -tlnp 2>/dev/null | grep 28789'" \
 echo "== 4. 纯 Java 单测（AppInfo 三数组对齐） =="
 export PATH=~/build-tools/jdk17/bin:$PATH
 rm -rf /tmp/smoke && mkdir -p /tmp/smoke
-javac -encoding UTF-8 -d /tmp/smoke src/com/phoneagent/app/AppInfo.java
+javac -encoding UTF-8 -d /tmp/smoke src/com/gsic/app/AppInfo.java
 cat > /tmp/smoke/S.java <<'EOF'
 public class S {
     public static void main(String[] a) throws Exception {
-        Class<?> c = Class.forName("com.phoneagent.app.AppInfo");
+        Class<?> c = Class.forName("com.gsic.app.AppInfo");
         int v = ((String[]) c.getField("LOG_VERSIONS").get(null)).length;
         int s2 = ((String[]) c.getField("LOG_SUMMARY").get(null)).length;
         int d = ((String[]) c.getField("LOG_DETAILS").get(null)).length;
@@ -40,7 +40,7 @@ echo "== 5. ActionRisk 分级单测 =="
 cat > /tmp/smoke/R.java <<'EOF'
 public class R {
     public static void main(String[] a) throws Exception {
-        Class<?> c = Class.forName("com.phoneagent.app.ActionRisk");
+        Class<?> c = Class.forName("com.gsic.app.ActionRisk");
         Object lv = c.getMethod("levelOf", String.class).invoke(null, "reboot");
         if (!"CRITICAL".equals(lv.toString())) { System.out.println("FAIL: reboot=" + lv); System.exit(1); }
         lv = c.getMethod("levelOf", String.class).invoke(null, "tap");
@@ -50,7 +50,7 @@ public class R {
 }
 EOF
 # ActionRisk 依赖 android 上下文？levelOf 是纯函数，单独编译
-javac -encoding UTF-8 -d /tmp/smoke src/com/phoneagent/app/ActionRisk.java 2>/dev/null \
+javac -encoding UTF-8 -d /tmp/smoke src/com/gsic/app/ActionRisk.java 2>/dev/null \
   && javac -encoding UTF-8 -cp /tmp/smoke -d /tmp/smoke /tmp/smoke/R.java \
   && java -cp /tmp/smoke R \
   || echo "SKIP: ActionRisk 需 android.jar，跳过（CI 上跑）"

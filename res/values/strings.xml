@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">手机Agent</string>
+    <string name="app_name">GSIC</string>
     <string name="service_desc">用于读取屏幕内容并执行自动化点击。所有处理均在手机本地完成，不联网、不上传。</string>
 </resources>
