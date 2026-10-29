@@ -23,3 +23,6 @@ patches/*.zip
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# 内置隧道二进制：构建时从官方 releases 拉取，不进版本跟踪
+assets/cloudflared

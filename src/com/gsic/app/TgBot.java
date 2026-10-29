@@ -19,7 +19,8 @@ import java.nio.charset.StandardCharsets;
  * <p>
  * 手机即 Bot：用户在 Telegram 里给机器人发指令，手机执行后回消息。
  * 不依赖 Tailscale，纯公网通道。安全：只有绑定的主人 chatId 能指挥，
- * 首次 /start 自动绑定，陌生人消息直接忽略。
+ * 首次 /start 自动绑定；陌生人私聊不再静默忽略，改回一句绑定提示
+ * （群聊仍忽略，防进群打扰），非文字消息也回一句通道说明（v3.77）。
  * <p>
  * 指令：
  * /start 绑定主人 ｜ /help 帮助 ｜ /status 状态
@@ -154,13 +155,32 @@ public class TgBot {
     private void handleUpdate(JSONObject u) {
         JSONObject msg = u.optJSONObject("message");
         if (msg == null) return;
-        long chatId = msg.optJSONObject("chat") != null
-                ? msg.optJSONObject("chat").optLong("id", 0) : 0;
+        JSONObject chat = msg.optJSONObject("chat");
+        long chatId = chat != null ? chat.optLong("id", 0) : 0;
         String text = msg.optString("text", "").trim();
         // v3.49：记住触发这条指令的消息 id，执行完的自动回复引用它（reply_parameters），
         // 用户一眼看出是哪条指令的结果
         long incomingId = msg.optLong("message_id", 0);
-        if (chatId == 0 || text.isEmpty()) return;
+        if (chatId == 0) return;
+        // v3.77：静默丢弃改可诊断回复——此前无文字消息（文件/图片/语音等）、
+        // 未绑定时非 /start、已绑定但非主人 chatId 三种情况一律 return、无任何回复，
+        // 用户在 TG 里只看到“无反应”，无法区分没启动/没绑定/绑错号/发了文件。
+        // 只对私聊回诊断提示（群聊仍忽略，防进群打扰）；主人正常文字流程不变。
+        boolean isPrivate = chat != null && "private".equals(chat.optString("type", ""));
+        if (text.isEmpty()) {
+            if (!isPrivate) return;
+            if (!store.hasOwner()) {
+                log("TG 诊断提示：未绑定");
+                sendMessage(chatId, "尚未绑定主人：请先发送 /start 绑定，绑定后直接发文字我就照做。");
+            } else if (chatId == store.getOwner()) {
+                log("TG 诊断提示：非文字消息");
+                sendMessage(chatId, "收到一条非文字消息（文件/图片/语音等）：Telegram 通道目前只处理文字指令，文件请用 App 内智能体页左边的 📎 文件输入喂给智能体。");
+            } else {
+                log("TG 诊断提示：已绑定他人");
+                sendMessage(chatId, "该机器人已绑定其他主人：如需更换，请在 GSIC App 内点「解绑主人」后重新发送 /start 绑定。");
+            }
+            return;
+        }
 
         // 主人绑定
         if (!store.hasOwner()) {
@@ -170,10 +190,19 @@ public class TgBot {
                 sendMessage(chatId, "绑定成功 ✅\n\n"
                         + "直接发文字我就照做（如\"打开微信\")。\n"
                         + "指令：/status 状态 /task {json} 任务 /shot 截屏 /help 帮助");
+            } else if (isPrivate) {
+                log("TG 诊断提示：未绑定");
+                sendMessage(chatId, "尚未绑定主人：请先发送 /start 绑定，绑定后直接发文字我就照做。");
             }
-            return; // 未绑定时其他消息一律忽略
+            return; // 未绑定时其他消息不再静默忽略（私聊回提示）
         }
-        if (chatId != store.getOwner()) return; // 陌生人忽略
+        if (chatId != store.getOwner()) {
+            if (isPrivate) {
+                log("TG 诊断提示：已绑定他人");
+                sendMessage(chatId, "该机器人已绑定其他主人：如需更换，请在 GSIC App 内点「解绑主人」后重新发送 /start 绑定。");
+            }
+            return; // 陌生人不再静默忽略（仅私聊回提示，群聊仍忽略）
+        }
 
         // v3.56 记忆分层·步骤7：连续 30 分钟无消息视为新会话——
         // 清共享轮次（长期认知库不动），等价于一次自动 /new

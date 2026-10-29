@@ -103,7 +103,10 @@ public class ApiHandler implements AgentHttpServer.Handler {
                         .put("service", AgentService.isRunning())
                         .put("terms_accepted", TermsGate.isAccepted(ctx))
                         .put("weekly_sediment_due", TermsGate.weeklyDue(ctx))
-                        .put("core_first", firstCore);
+                        .put("core_first", firstCore)
+                        .put("cf_tunnel_running", CloudflareTunnel.isRunning())
+                        .put("cf_tunnel_url", CloudflareTunnel.getUrl())
+                        .put("cf_tunnel_proxy", CloudflareTunnel.isProxyMode(ctx));
                 if (firstCore) st.put("core", TermsGate.CORE_TEXT);
                 return st.toString();
             }

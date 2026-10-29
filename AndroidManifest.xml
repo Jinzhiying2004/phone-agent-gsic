@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.gsic.app"
-    android:versionCode="178"
-    android:versionName="3.66">
+    android:versionCode="189"
+    android:versionName="3.77">
 
     <!-- INTERNET 仅用于首次下载官方 Termux 环境（约 30MB，一次性）；日常使用仍本地执行 -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -54,6 +54,11 @@
         <provider
             android:name=".CaptureProvider"
             android:authorities="com.gsic.app.captureprovider"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+        <provider
+            android:name=".GsicFileProvider"
+            android:authorities="com.gsic.app.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true" />
         <provider

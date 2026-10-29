@@ -146,6 +146,11 @@ public class AgentService extends Service {
             installRootWatchdog();
             // v3.05：TG 机器人随服务自启（后台真运行）
             tryStartTgBot();
+            // v3.67：内置 Cloudflare 隧道按开关恢复（快速隧道，手动同步地址）
+            try {
+                CloudflareTunnel.startIfEnabled(this, port);
+            } catch (Exception ignored) {
+            }
             // v3.48：待机光效「M 八爪鱼」
             try {
                 pet = new PetController(this);
@@ -287,6 +292,11 @@ public class AgentService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        // v3.67：服务销毁时停隧道进程，开关保留，下次服务启动按开关恢复
+        try {
+            CloudflareTunnel.stopProcessOnly();
+        } catch (Exception ignored) {
+        }
         if (pet != null) pet.stop();
         // v3.05：服务销毁时停 TG
         stopTgBot();

@@ -40,6 +40,7 @@ public class MainActivity extends Activity {
     private static final int RED = 0xFFC62828;
 
     private static final int REQ_IMPORT = 1001;
+    private static final int REQ_FILE_IN = 1002;
 
     private LinearLayout pageHome, pageRemote, pageAgent, pageTerm, pageMy;
     private TabIconView tabHome, tabRemote, tabAgent, tabTerm, tabMy;
@@ -86,6 +87,8 @@ public class MainActivity extends Activity {
     // AI 智能执行（Agent 循环）
     private EditText agentGoal;
     private LinearLayout agentInputBar;
+    private android.view.View agentTopHeader, agentTopModel, agentTopRisk;
+    private boolean agentTopCollapsed = false;
     private android.graphics.drawable.Drawable agentInputBg;
     private FlowLightDrawable agentInputFlow;
     private LinearLayout agentMsgBox;
@@ -2026,8 +2029,31 @@ public class MainActivity extends Activity {
         page.setPadding(dp(12), dp(8), dp(12), 0);
         page.setBackgroundColor(DyColor.surface(this));
 
+        // v3.75：顶部功能折叠小按钮（软件框左上，点一下收起/展开上面一堆功能）
+        android.widget.Button topCollapseBtn = new android.widget.Button(this);
+        topCollapseBtn.setText("☰ 功能");
+        topCollapseBtn.setTextSize(12);
+        topCollapseBtn.setTextColor(DyColor.onPrimary(this));
+        topCollapseBtn.setBackground(bubbleBg(DyColor.primary(this), 16));
+        topCollapseBtn.setPadding(dp(12), dp(4), dp(12), dp(4));
+        android.widget.LinearLayout.LayoutParams topLp = new android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+        topCollapseBtn.setLayoutParams(topLp);
+        // v3.76：只收纳下面圈出来的那几行（审批/悬浮窗/流式/文件列表），
+        // 标题+历史/新对话、模型行不收，默认收起，点左上角按钮才展开。
+        topCollapseBtn.setText("☰ 功能 ▸");
+        agentTopCollapsed = true;
+        topCollapseBtn.setOnClickListener(v -> {
+            agentTopCollapsed = !agentTopCollapsed;
+            int vis = agentTopCollapsed ? android.view.View.GONE : android.view.View.VISIBLE;
+            if (agentTopRisk != null) agentTopRisk.setVisibility(vis);
+            topCollapseBtn.setText(agentTopCollapsed ? "☰ 功能 ▸" : "☰ 功能 ▾");
+        });
+        page.addView(topCollapseBtn);
         // 顶栏：标题 + 历史记录按钮
         LinearLayout agentHeader = new LinearLayout(this);
+        agentTopHeader = agentHeader;
         agentHeader.setOrientation(LinearLayout.HORIZONTAL);
         agentHeader.setGravity(Gravity.CENTER_VERTICAL);
         agentHeader.setPadding(0, 0, 0, dp(4));
@@ -2065,6 +2091,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams amLp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         agentModelRow.addView(agentModelSpinner, amLp);
+        agentTopModel = agentModelRow;
         page.addView(agentModelRow);
         refreshAgentModels();
 
@@ -2097,6 +2124,8 @@ public class MainActivity extends Activity {
         final LinearLayout riskFloatBox = new LinearLayout(this);
         riskFloatBox.setOrientation(LinearLayout.VERTICAL);
         riskFloatBox.addView(riskRow);
+        agentTopRisk = riskFloatBox;
+        riskFloatBox.setVisibility(android.view.View.GONE);
         page.addView(riskFloatBox);
         refreshRiskRow.run();
 
@@ -2146,18 +2175,33 @@ public class MainActivity extends Activity {
             log(streamOn[0] ? "🌊 流式输出已开启" : "🌊 流式输出已关闭");
         });
         riskFloatBox.addView(streamRow);
+        final TextView fileRow = new TextView(this);
+        fileRow.setTextSize(12);
+        fileRow.setPadding(dp(4), 0, dp(4), dp(8));
+        fileRow.setClickable(true);
+        fileRow.setFocusable(true);
+        fileRow.setText("📁 文件收件箱 / 发件箱（点我查看、打开、分享）");
+        fileRow.setTextColor(DyColor.primary(this));
+        fileRow.setOnClickListener(v -> showFileListDialog());
+        riskFloatBox.addView(fileRow);
         // v2.96：收纳按钮放进输入栏（下面加），和发送对称
         // v2.97：改图标（功能多，不叫审批了）
+        // v3.75：输入栏左边按钮改为文件输入（用户亲定），点它选文件喂给智能体；
+        // 原来的收纳功能改由左上角“☰ 功能”小按钮负责，不再占输入栏左边。
         final Button riskToggleBtn = new Button(this);
-        riskToggleBtn.setText("⚙️");
+        riskToggleBtn.setText("📎");
         riskToggleBtn.setTextSize(16);
         riskToggleBtn.setTextColor(android.graphics.Color.WHITE);
         riskToggleBtn.setBackground(bubbleBg(DyColor.primary(this), 20));
         riskToggleBtn.setPadding(dp(12), dp(10), dp(12), dp(10));
-        final boolean[] riskExpanded = {true};
         riskToggleBtn.setOnClickListener(v -> {
-            riskExpanded[0] = !riskExpanded[0];
-            riskFloatBox.setVisibility(riskExpanded[0] ? View.VISIBLE : View.GONE);
+            android.content.Intent it = new android.content.Intent(
+                    android.content.Intent.ACTION_GET_CONTENT);
+            it.setType("*/*");
+            it.addCategory(android.content.Intent.CATEGORY_OPENABLE);
+            startActivityForResult(
+                    android.content.Intent.createChooser(it, "选一个文件喂给 GSIC"),
+                    REQ_FILE_IN);
         });
         // 每次进智能体页刷新状态（onResume 里调）
         agentFloatHintRefresher = refreshFloatHint;
@@ -2495,6 +2539,37 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode,
                                     Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_FILE_IN && resultCode == RESULT_OK
+                && data != null && data.getData() != null) {
+            final android.net.Uri uri = data.getData();
+            new Thread(() -> {
+                try {
+                    String disp = null;
+                    try {
+                        android.database.Cursor cur = getContentResolver().query(
+                                uri, null, null, null, null);
+                        if (cur != null) {
+                            int idx = cur.getColumnIndex(
+                                    android.provider.OpenableColumns.DISPLAY_NAME);
+                            if (cur.moveToFirst() && idx >= 0) disp = cur.getString(idx);
+                            cur.close();
+                        }
+                    } catch (Exception ignored) {
+                    }
+                    final java.io.File f = FileInbox.importUri(this, uri, disp);
+                    runOnUiThread(() -> {
+                        addChatSystem("📎 已收到文件：" + f.getName() + "（"
+                                + f.length() + " 字节），已放进收件箱 files/inbox/"
+                                + f.getName() + "。告诉我怎么处理它（解压 / 列出 / 打开等），"
+                                + "Agent 可用 read_file 读它。", "");
+                        addFileRow(f);
+                    });
+                } catch (Exception e) {
+                    runOnUiThread(() -> log("喂文件失败：" + e.getMessage()));
+                }
+            }, "file-import").start();
+            return;
+        }
         if (requestCode == REQ_IMPORT && resultCode == RESULT_OK
                 && data != null && data.getData() != null) {
             try {
@@ -3146,6 +3221,8 @@ public class MainActivity extends Activity {
     private LinearLayout buildRemotePage() {
         remoteSections = new java.util.HashMap<>();
         remoteSections.put("svc", buildSvcCard());
+        remoteSections.put("cf", buildCfCard());
+        remoteSections.put("clashapp", buildClashAppCard());
         remoteSections.put("muse", buildMuseCard());
         remoteSections.put("tg", buildTgCard());
         remoteSections.put("api", buildApiCard());
@@ -3163,6 +3240,10 @@ public class MainActivity extends Activity {
                 v -> showRemoteSection("svc"));
         addMenuRow(remoteList, "☁️", "云端操控", "Tailscale 内网被控",
                 v -> showRemoteSection("muse"));
+        addMenuRow(remoteList, "🌩️", "Cloudflare 隧道（内置）", "cloudflared 打包进软件，快速隧道",
+                v -> showRemoteSection("cf"));
+        addMenuRow(remoteList, "🧩", "clash 按 App 直连", "选中的 App 走直连，其余走代理",
+                v -> showRemoteSection("clashapp"));
         addMenuRow(remoteList, "✈️", "Telegram 机器人", "Bot 公网控制",
                 v -> showRemoteSection("tg"));
         addMenuRow(remoteList, "🔌", "API 接口", "接口文档",
@@ -3285,6 +3366,162 @@ public class MainActivity extends Activity {
         StringBuilder sb = new StringBuilder();
         for (String l : rt.tail(12)) sb.append(l).append("\n");
         remoteTaskLog.setText(sb.toString().trim());
+    }
+
+    // ---------- v3.67 内置 Cloudflare 隧道卡 ----------
+    private TextView cfInfo;
+
+    private void refreshCfCard() {
+        if (cfInfo == null) return;
+        cfInfo.setText(CloudflareTunnel.statusText(this)
+                + "\n\n说明：快速隧道地址每次启动就换，本版先手动同步："
+                + "把上面地址发给云端 Muse，它用该地址探 /status，仍要过远控 token 鉴权。"
+                + "隧道本身不是鉴权，地址外泄不等于能操作手机。");
+    }
+
+    private LinearLayout buildCfCard() {
+        LinearLayout c = card();
+        c.addView(cardTitle("Cloudflare 隧道（内置）"));
+        cfInfo = new TextView(this);
+        cfInfo.setTextSize(14);
+        cfInfo.setTextColor(TEXT_DARK);
+        c.addView(cfInfo);
+        Button bStart = btn("启动隧道");
+        bStart.setOnClickListener(v -> {
+            CloudflareTunnel.start(this, AgentService.getPort(this));
+            cfInfo.postDelayed(this::refreshCfCard, 3000);
+            cfInfo.postDelayed(this::refreshCfCard, 10000);
+        });
+        c.addView(bStart);
+        Button bProxy = btn("启动隧道（走代理 7890）");
+        bProxy.setOnClickListener(v -> {
+            CloudflareTunnel.startWithProxy(this, AgentService.getPort(this), true);
+            cfInfo.postDelayed(this::refreshCfCard, 3000);
+            cfInfo.postDelayed(this::refreshCfCard, 10000);
+        });
+        c.addView(bProxy);
+        Button bRule = btn("加直连规则（重启 clash）");
+        bRule.setOnClickListener(v -> {
+            cfInfo.setText("正在给 clash 加 trycloudflare 直连规则（先备份，失败自动回滚）…");
+            new Thread(() -> {
+                final ClashDirectRule.Result r = ClashDirectRule.apply();
+                cfInfo.post(() -> cfInfo.setText(r.message));
+            }, "cf-direct-rule").start();
+        });
+        c.addView(bRule);
+        Button bStop = btn("停止隧道");
+        bStop.setOnClickListener(v -> {
+            CloudflareTunnel.stop(this);
+            cfInfo.postDelayed(this::refreshCfCard, 500);
+        });
+        c.addView(bStop);
+        Button bCopy = btn("复制隧道地址");
+        bCopy.setOnClickListener(v -> {
+            String u = CloudflareTunnel.getUrl();
+            if (u == null || u.isEmpty()) {
+                Toast.makeText(this, "还没有地址，先启动隧道等几秒", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                    getSystemService(CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("cf-tunnel", u));
+            Toast.makeText(this, "已复制隧道地址", Toast.LENGTH_SHORT).show();
+        });
+        c.addView(bCopy);
+        Button bRefresh = btn("刷新状态");
+        bRefresh.setOnClickListener(v -> refreshCfCard());
+        c.addView(bRefresh);
+        cfInfo.postDelayed(this::refreshCfCard, 500);
+        return c;
+    }
+
+    // ---------- v3.70 clash 按 App 直连卡 ----------
+    private TextView clashAppInfo;
+    private LinearLayout clashAppBox;
+    private java.util.Set<String> clashAppSelection = new java.util.HashSet<>();
+
+    private void refreshClashAppRows() {
+        if (clashAppBox == null) return;
+        clashAppInfo.setText("正在读已装应用…");
+        new Thread(() -> {
+            final java.util.List<ClashAppBypass.AppItem> apps = ClashAppBypass.listApps(this);
+            final java.util.Set<String> sel = ClashAppBypass.loadSelection(this);
+            clashAppSelection = new java.util.HashSet<>(sel);
+            clashAppBox.post(() -> {
+                clashAppBox.removeAllViews();
+                if (apps.isEmpty()) {
+                    clashAppBox.addView(grayText("没读到应用，点刷新重试"));
+                }
+                for (ClashAppBypass.AppItem it : apps) {
+                    LinearLayout row = new LinearLayout(this);
+                    row.setOrientation(LinearLayout.HORIZONTAL);
+                    TextView tv = new TextView(this);
+                    tv.setText(it.label + "\n" + it.pkg);
+                    tv.setTextSize(13);
+                    tv.setTextColor(TEXT_DARK);
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
+                            LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+                    row.addView(tv, lp);
+                    android.widget.Switch sw = new android.widget.Switch(this);
+                    sw.setChecked(clashAppSelection.contains(it.pkg));
+                    sw.setOnCheckedChangeListener((b, checked) -> {
+                        if (checked) clashAppSelection.add(it.pkg);
+                        else clashAppSelection.remove(it.pkg);
+                    });
+                    row.addView(sw);
+                    clashAppBox.addView(row);
+                }
+                clashAppInfo.setText("已选 " + clashAppSelection.size() + " 个 App。"
+                        + "勾选只改选单，点下面应用才生效；"
+                        + "选 GSIC 本身时 cloudflared 也直连（子进程同 UID）。"
+                        + "只对本机 App 生效，热点下设备不受影响；DNS 仍走 clash。");
+            });
+        }, "clash-app-list").start();
+    }
+
+    private LinearLayout buildClashAppCard() {
+        LinearLayout c = card();
+        c.addView(cardTitle("clash 按 App 直连"));
+        clashAppInfo = new TextView(this);
+        clashAppInfo.setTextSize(14);
+        clashAppInfo.setTextColor(TEXT_DARK);
+        clashAppInfo.setText("按 App 选直连：选中 App 的流量走正常路由直连，"
+                + "其余 App 仍走 clash 代理；DNS 仍走 clash，不会断网。"
+                + "机制是 iptables 按 UID 豁免（同 root/Tailscale 豁免），"
+                + "不是 mihomo 的进程名规则。先点刷新应用列表，再勾选、应用。");
+        c.addView(clashAppInfo);
+        clashAppBox = new LinearLayout(this);
+        clashAppBox.setOrientation(LinearLayout.VERTICAL);
+        c.addView(clashAppBox);
+        Button bList = btn("刷新应用列表");
+        bList.setOnClickListener(v -> refreshClashAppRows());
+        c.addView(bList);
+        Button bApply = btn("应用直连设置（不重启 clash）");
+        bApply.setOnClickListener(v -> {
+            clashAppInfo.setText("正在应用直连设置（写 UID 文件、打钩子、即时插 iptables）…");
+            new Thread(() -> {
+                final ClashAppBypass.Result r = ClashAppBypass.apply(this,
+                        new java.util.HashSet<>(clashAppSelection));
+                clashAppInfo.post(() -> clashAppInfo.setText(r.message));
+            }, "clash-app-apply").start();
+        });
+        c.addView(bApply);
+        Button bRestart = btn("重启 clash");
+        bRestart.setOnClickListener(v -> {
+            clashAppInfo.setText("正在重启 clash（会短暂断代理，几秒恢复，重启失败也不等于断网）…");
+            new Thread(() -> {
+                final ClashAppBypass.Result r = ClashAppBypass.restartClash();
+                clashAppInfo.post(() -> clashAppInfo.setText(r.message));
+            }, "clash-restart").start();
+        });
+        c.addView(bRestart);
+        Button bClear = btn("全部取消");
+        bClear.setOnClickListener(v -> {
+            clashAppSelection.clear();
+            refreshClashAppRows();
+        });
+        c.addView(bClear);
+        return c;
     }
 
     private LinearLayout buildSvcCard() {
@@ -5859,6 +6096,150 @@ public class MainActivity extends Activity {
      * 有选项时点选；无选项时让用户自由补充。返回拼好"（用户明确：…）"的重跑目标，
      * 用户取消返回 null（并置 agentStop）。
      */
+
+    // ---------- v3.74 原生文件输入输出（不走邮箱） ----------
+    private void openInboxFile(java.io.File f) {
+        try {
+            android.net.Uri uri = GsicFileProvider.uriFor(this, f);
+            if (uri == null) {
+                Toast.makeText(this, "这个文件不在收件箱/发件箱里", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            android.content.Intent it = new android.content.Intent(
+                    android.content.Intent.ACTION_VIEW);
+            it.setDataAndType(uri, FileInbox.mimeFor(f.getName()));
+            it.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(android.content.Intent.createChooser(it, "打开文件"));
+        } catch (Exception e) {
+            Toast.makeText(this, "没有能打开这个文件的应用", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void shareInboxFile(java.io.File f) {
+        try {
+            android.net.Uri uri = GsicFileProvider.uriFor(this, f);
+            if (uri == null) return;
+            android.content.Intent it = new android.content.Intent(
+                    android.content.Intent.ACTION_SEND);
+            it.setType(FileInbox.mimeFor(f.getName()));
+            it.putExtra(android.content.Intent.EXTRA_STREAM, uri);
+            it.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(android.content.Intent.createChooser(it, "分享文件"));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void addFileRow(final java.io.File f) {
+        if (agentMsgBox == null) return;
+        android.widget.LinearLayout row = new android.widget.LinearLayout(this);
+        row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        android.widget.TextView tv = new android.widget.TextView(this);
+        tv.setText("📎 " + f.getName() + "（" + f.length() + " 字节）");
+        tv.setTextSize(13);
+        tv.setTextColor(TEXT_DARK);
+        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        row.addView(tv, lp);
+        android.widget.Button bOpen = smallBtn("打开");
+        bOpen.setOnClickListener(v -> openInboxFile(f));
+        row.addView(bOpen);
+        android.widget.Button bShare = smallBtn("分享");
+        bShare.setOnClickListener(v -> shareInboxFile(f));
+        row.addView(bShare);
+        if (f.getName().toLowerCase().endsWith(".zip")) {
+            android.widget.Button bUnzip = smallBtn("解压");
+            bUnzip.setOnClickListener(v -> new Thread(() -> {
+                try {
+                    final int n = FileInbox.unzipTo(this, f);
+                    runOnUiThread(() -> log("已解压 " + n + " 个文件到收件箱 unzipped/"
+                            + f.getName().replaceAll("(?i)\\.zip$", "") + "/，点文件列表查看"));
+                } catch (Exception e) {
+                    runOnUiThread(() -> log("解压失败：" + e.getMessage()));
+                }
+            }, "file-unzip").start());
+            row.addView(bUnzip);
+        }
+        agentMsgBox.addView(row);
+        if (agentScrollView != null) {
+            agentScrollView.post(() -> agentScrollView.fullScroll(
+                    android.view.View.FOCUS_DOWN));
+        }
+    }
+
+    private void showFileListDialog() {
+        android.widget.LinearLayout list = new android.widget.LinearLayout(this);
+        list.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = dp(12);
+        list.setPadding(pad, pad, pad, pad);
+        android.widget.TextView inboxTitle = new android.widget.TextView(this);
+        inboxTitle.setText("收件箱（你喂进来的文件）");
+        inboxTitle.setTextSize(15);
+        inboxTitle.setTypeface(inboxTitle.getTypeface(), android.graphics.Typeface.BOLD);
+        list.addView(inboxTitle);
+        for (FileInbox.Item it : FileInbox.listDir(FileInbox.inboxDir(this), "")) {
+            final java.io.File f = new java.io.File(FileInbox.inboxDir(this), it.rel);
+            if (it.dir) {
+                android.widget.TextView tv = new android.widget.TextView(this);
+                tv.setText("📁 " + it.name + "/（文件夹）");
+                tv.setTextSize(13);
+                list.addView(tv);
+                continue;
+            }
+            android.widget.LinearLayout row = new android.widget.LinearLayout(this);
+            row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            android.widget.TextView tv = new android.widget.TextView(this);
+            tv.setText(it.name + "（" + it.size + " 字节）");
+            tv.setTextSize(13);
+            android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                    0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            row.addView(tv, lp);
+            android.widget.Button bOpen = smallBtn("打开");
+            bOpen.setOnClickListener(v -> openInboxFile(f));
+            row.addView(bOpen);
+            android.widget.Button bShare = smallBtn("分享");
+            bShare.setOnClickListener(v -> shareInboxFile(f));
+            row.addView(bShare);
+            list.addView(row);
+        }
+        android.widget.TextView outTitle = new android.widget.TextView(this);
+        outTitle.setText("发件箱（Agent 产出的文件）");
+        outTitle.setTextSize(15);
+        outTitle.setTypeface(outTitle.getTypeface(), android.graphics.Typeface.BOLD);
+        list.addView(outTitle);
+        java.util.List<FileInbox.Item> outs = FileInbox.listDir(FileInbox.outboxDir(this), "");
+        if (outs.isEmpty()) {
+            android.widget.TextView tv = new android.widget.TextView(this);
+            tv.setText("（空）Agent 产出文件后会放在这里");
+            tv.setTextSize(13);
+            list.addView(tv);
+        }
+        for (FileInbox.Item it : outs) {
+            final java.io.File f = new java.io.File(FileInbox.outboxDir(this), it.rel);
+            android.widget.LinearLayout row = new android.widget.LinearLayout(this);
+            row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            android.widget.TextView tv = new android.widget.TextView(this);
+            tv.setText(it.name + "（" + it.size + " 字节）");
+            tv.setTextSize(13);
+            android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                    0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            row.addView(tv, lp);
+            android.widget.Button bOpen = smallBtn("打开");
+            bOpen.setOnClickListener(v -> openInboxFile(f));
+            row.addView(bOpen);
+            android.widget.Button bShare = smallBtn("分享");
+            bShare.setOnClickListener(v -> shareInboxFile(f));
+            row.addView(bShare);
+            list.addView(row);
+        }
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(list);
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("📁 文件收件箱 / 发件箱")
+                .setView(sv)
+                .setPositiveButton("关闭", null)
+                .show();
+    }
     private String askClarifyGoal(String goal, AgentLoop loop) {
         if (agentStop) return null;
         final String question = loop.clarifyQuestion();
@@ -5867,40 +6248,85 @@ public class MainActivity extends Activity {
         final java.util.concurrent.CountDownLatch latch =
                 new java.util.concurrent.CountDownLatch(1);
         runOnUiThread(() -> {
+            // v3.73：澄清对话框重做（2026-10-29 实测 bug）：
+            // 旧版 AlertDialog.setMessage(带序号的全文) + setItems(选项) 在长文本下
+            // 选项列表被挤出可视区、对话框又 setCancelable(false) 盖住聊天输入栏，
+            // 用户既点不到选项、也打不了序号，只能取消任务，死锁。
+            // 新版：问题只显示目标+存疑（去掉“是指：①②③④ 请回复序号”那段，
+            // 那段是 TG/远控打字回复用的，App 里不该出现），选项全部做成
+            // 全宽可点按钮放进 ScrollView，长选项也不会把按钮挤掉；
+            // 再加自由补充输入框 + 确定，返回键也可取消，不再死锁。
+            String shortQ = question;
+            int idx = shortQ.indexOf("，是指：");
+            if (idx >= 0) shortQ = shortQ.substring(0, idx) + "，请选一个：";
+            android.widget.LinearLayout content = new android.widget.LinearLayout(this);
+            content.setOrientation(android.widget.LinearLayout.VERTICAL);
+            int pad = dp(16);
+            content.setPadding(pad, pad, pad, pad);
+            android.widget.TextView qv = new android.widget.TextView(this);
+            qv.setText(shortQ);
+            qv.setTextSize(15);
+            qv.setTextColor(TEXT_DARK);
+            content.addView(qv);
+            final android.app.AlertDialog[] dlg = {null};
+            if (opts != null && !opts.isEmpty()) {
+                for (String opt : opts) {
+                    android.widget.Button ob = new android.widget.Button(this);
+                    ob.setText(opt);
+                    ob.setAllCaps(false);
+                    android.widget.LinearLayout.LayoutParams olp =
+                            new android.widget.LinearLayout.LayoutParams(
+                                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+                    olp.setMargins(0, dp(8), 0, 0);
+                    ob.setLayoutParams(olp);
+                    final String chosen = opt;
+                    ob.setOnClickListener(v -> {
+                        result[0] = goal + "（用户明确：" + chosen + "）";
+                        if (dlg[0] != null) dlg[0].dismiss();
+                        latch.countDown();
+                    });
+                    content.addView(ob);
+                }
+            }
+            final android.widget.EditText et = new android.widget.EditText(this);
+            et.setHint("或其他补充说明…");
+            et.setMinLines(2);
+            android.widget.LinearLayout.LayoutParams elp =
+                    new android.widget.LinearLayout.LayoutParams(
+                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            elp.setMargins(0, dp(12), 0, 0);
+            et.setLayoutParams(elp);
+            content.addView(et);
+            android.widget.ScrollView sv = new android.widget.ScrollView(this);
+            sv.addView(content);
             android.app.AlertDialog.Builder b =
                     new android.app.AlertDialog.Builder(this)
                             .setTitle("❓ 需要确认一下")
-                            .setMessage(question)
-                            .setCancelable(false)
+                            .setView(sv)
+                            .setCancelable(true)
+                            .setOnCancelListener(d -> {
+                                result[0] = null;
+                                agentStop = true;
+                                latch.countDown();
+                            })
+                            .setPositiveButton("确定", (d, w) -> {
+                                String txt = et.getText().toString().trim();
+                                if (txt.isEmpty()) {
+                                    result[0] = null;
+                                    agentStop = true;
+                                } else {
+                                    result[0] = goal + "（用户明确：" + txt + "）";
+                                }
+                                latch.countDown();
+                            })
                             .setNegativeButton("取消任务", (d, w) -> {
                                 result[0] = null;
                                 agentStop = true;
                                 latch.countDown();
                             });
-            if (opts != null && !opts.isEmpty()) {
-                final String[] items = opts.toArray(new String[0]);
-                b.setItems(items, (d, which) -> {
-                    result[0] = goal + "（用户明确：" + items[which] + "）";
-                    latch.countDown();
-                });
-            } else {
-                final android.widget.EditText et =
-                        new android.widget.EditText(this);
-                et.setHint("请补充说明…");
-                et.setMinLines(2);
-                b.setView(et);
-                b.setPositiveButton("确定", (d, w) -> {
-                    String t = et.getText().toString().trim();
-                    if (t.isEmpty()) {
-                        result[0] = null;
-                        agentStop = true;
-                    } else {
-                        result[0] = goal + "（用户明确：" + t + "）";
-                    }
-                    latch.countDown();
-                });
-            }
-            b.show();
+            dlg[0] = b.show();
         });
         try {
             latch.await();

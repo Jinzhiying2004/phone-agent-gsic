@@ -35,6 +35,16 @@ if [ ! -f assets/vdinput.dex ] || [ tools/VdInput.java -nt assets/vdinput.dex ] 
   echo "vdinput.dex 已生成"
 fi
 
+# cloudflared：内置隧道二进制（linux-arm64 静态版，官方 GitHub releases）。
+# 二进制不进 git 推送管线；构建时缺失则自动拉取，存在则直接用。
+if [ ! -f assets/cloudflared ] || [ ! -s assets/cloudflared ]; then
+  echo "== cloudflared 拉取（构建时，官方 releases） =="
+  curl -L --max-time 180 -o assets/cloudflared \
+    https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64
+  chmod +x assets/cloudflared
+fi
+ls -lh assets/cloudflared
+
 rm -rf $OUT && mkdir -p $OUT/compiled $OUT/gen $OUT/classes $OUT/dex
 
 echo "== 1/6 aapt2 compile =="
